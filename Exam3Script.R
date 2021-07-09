@@ -1,0 +1,158 @@
+###### Exam 3 ########
+
+
+#1. clear environment
+rm(list=ls(all=TRUE))
+
+
+#2. download WDI data on female labor force participation
+library(WDI)
+
+female_lfp = WDI(country = "all",
+                 indicator =c("SL.TLF.CACT.FE.NE.ZS"),
+                 start = 2010, end = 2015, extra = FALSE, cache = NULL)
+
+
+#3. rename the female labor force participation variable flfp
+library(dplyr)
+
+female_lfp = rename(female_lfp, flfp = SL.TLF.CACT.FE.NE.ZS)
+
+
+#4. collapse by mean flfp by country
+
+collapsed_flfp = female_lfp %>%
+  group_by(country, iso2c) %>%
+  summarize(flfp = mean(flfp, na.rm=TRUE))
+
+
+#5. show which countries have average female force participation rates 
+#for the 2010-2015 period that are less than 15%
+
+collapsed_flfp$flfp = as.numeric(collapsed_flfp$flfp)
+
+low_participation_countries = collapsed_flfp %>%
+  filter(flfp < 15)
+
+print(low_participation_countries)
+
+
+#6. map collapsed_flfp onto a world map, using viridis color scheme
+library(sf)
+
+world <-ne_countries(scale = "large", returnclass = "sf")
+
+world = rename(world, iso2c = iso_a2)
+
+merged_data = left_join(world, collapsed_flfp, by="iso2c")
+
+
+collapsed_flfp_map = ggplot() +
+  geom_sf(data = world) +                                             
+  geom_sf(data = merged_data, aes(fill=`flfp`)) +                      
+  scale_fill_viridis(option = "viridis") +                                
+  ggtitle("World Female Labor Participation, in Percent") +      
+  theme(plot.title = element_text(hjust = 0.5)) +                                        
+  theme_void()  
+
+print(collapsed_flfp_map)
+
+#ggsave(collapsed_flfp_map, filename = "collapsed_flfp_map", width = 6.5, height = 6)
+
+# 8. show the same cluster of states referenced in the previous question 
+
+africa = ne_countries(continent = 'Africa',
+                      scale = "large",
+                      returnclass = "sf")
+
+setnames(merged_data, "sovereignt", "country")
+
+
+africa_only_data <-subset(merged_data, country=="United Republic of Tanzania"|
+                 country=="Democratic Republic of the Congo"|country=="Angola"|
+                 country=="Mozambique"|country=="Malawi"|country=="Zambia"|
+                 country=="Madagascar"|country=="Zimbabwe"|country=="Eswatini"|
+                 country=="Namibia"|country=="Botswana"| country=="South Africa"|
+                   country=="Republic of the Congo")
+
+
+africa_flfp_map = ggplot() +
+  geom_sf(data = africa) +                                             
+  geom_sf(data = africa_only_data, aes(fill=`flfp`)) +                      
+  scale_fill_viridis(option = "viridis") +                                
+  ggtitle("Female Labor Participation in Africa, in Percent") +      
+  theme(plot.title = element_text(hjust = 0.5)) +                                        
+  theme_void()  
+
+print(africa_flfp_map)
+
+
+#10. Pull Pdf from Mike's webpage
+library(pdftools)
+mytext = pdf_text(pdf = "https://pdf.usaid.gov/pdf_docs/PA00TNMJ.pdf")
+
+
+#11. Convert pdf to data frame
+armeniatext = as.data.frame(mytext, stringsAsFactors=FALSE)
+
+
+#12. Tokenize by word, removing stop words
+library(tidytext)
+library(stringr)
+library(tidyr)
+
+armeniatext = armeniatext %>%
+  unnest_tokens(word, mytext)
+
+data("stop_words")
+armeniatext = armeniatext %>%
+  anti_join(stop_words)
+
+#13. Figure out the top 5 most used words
+most_used = armeniatext %>%
+  count(word, sort=T)
+
+print(most_used[1:10,])
+
+
+#14. Load the billboard Hot 100 webpage
+library(rvest)
+
+hot100exam = rvest::read_html("https://www.billboard.com/charts/hot-100")
+
+
+#15. Identify all nodes using rvest
+body_nodes = hot100exam %>%
+  rvest::html_node("body") %>%
+  rvest::html_children()
+
+
+#16. Pull data on Rank, Artist, Title, and Last Week
+rank = hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,                
+                     'chart-element__rank__number')]") %>%
+  rvest::html_text()
+
+artist <-hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__artist')]") %>%
+  rvest::html_text()
+
+title <-hot100exam %>% 
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__song')]") %>%
+  rvest::html_text()
+
+last_week <-hot100exam %>% 
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__meta text--center color--secondary text--last')]") %>%
+  rvest::html_text()
+
+#16b Save as dataframe, .dta file
+chart_df = data.frame(rank, artist, title, last_week)
+
+
